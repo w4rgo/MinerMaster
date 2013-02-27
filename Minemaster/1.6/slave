@@ -1,0 +1,1034 @@
+--PARAMETERS
+timeout=0.6
+--PARAM
+
+status="IDLE"
+--beginTime=os.time()
+
+function connectW()
+	print("Connecting with the port right")
+	rednet.open("right") 
+end
+maxx=150
+maxy=150
+maxz=150
+map = {}
+for i=1,maxx do
+	map[i] = {}
+	for j=1,maxy do
+		map[i][j] = {}
+		for k = 1 ,maxz do
+			map[i][j][k]=3
+		end
+	end
+end
+
+
+x =75
+y = 75
+z = 75
+
+initialx=x
+initialy=y
+initialz=z
+
+xant=x
+yant=y
+zant=z
+dir = 0
+storage=100
+dirini=0
+timeleft=0
+blocksLeft=0
+realx = nil
+realy = nil
+realz = nil
+gpsenabled = false
+
+
+
+function connectGps()
+	local posx, posy, posz
+	print("Trying to connect with GPS system ( You must have 4 computers running gps host program to trillaterate)")
+	print("This may take a few seconds...")
+	posx, posy,posz = gps.locate(5,true)
+
+	if  posx ~= nil then
+		gpsenabled=true
+		print("Success!! Coordinates are "..posx .." "..posy.." "..posz.." ")
+		print("Translating Z into real Z must change in future...")
+		realx = posx
+		realy = posz
+		realz = posy
+		
+		-- map = {}
+		-- for i=x-100,x+100 do
+			-- map[i] = {}
+			-- for j=y-100,y+100 do
+				-- map[i][j] = {}
+				-- for k = z-100 , z+100 do
+					-- map[i][j][k]=3
+				-- end
+			-- end
+		-- end
+		
+		
+		
+	else
+		print("Slave was unable to connect with gps system...")
+		print("Using 100 , 100 , 100 as relative coordinates")
+
+	end
+	
+end
+
+function checkStorage()
+
+	blocks = 0
+	for count=1, 9, 1 do
+		--turtle.select(count)
+		blocks = blocks + turtle.getItemSpace(count)
+	end
+	
+	return blocks
+end
+
+function isAllSlots()
+	isall = true
+	for count = 1, 9 , 1 do
+		if turtle.getItemCount(count)==0 then
+			isall = false
+		end
+	end	
+	
+	return isall
+end
+
+function dropAll()
+	for count=1, 9, 1 do
+		turtle.select(count)
+		turtle.drop()
+	end
+end
+
+function presentMiner()
+
+
+	print("Searching for a master...")
+	while true do
+		id, msg = rednet.receive()
+		print("Received message: ".. msg)
+		if msg == "minemaster" then
+			master=id
+			rednet.send(master,"slave")
+			print("Master id: ".. master)
+			
+		end
+		break
+	end
+end
+function dirToChar(dir) 
+	if dir == 0 then
+		return '^'
+	elseif dir == 1 then
+		return '>'
+	elseif dir == 2 then
+		return 'v'
+	elseif dir ==3 then
+		return '<'
+	end	
+end
+function updateMatrix() 
+	--Set the previous pos to blank
+	map[xant][yant][zant]=2
+	map[x][y][z] = 1
+
+end
+
+
+function ScreenUpdate()
+	screen =''
+	
+	prompt = ' '
+	
+	for ya = 9,-9,-1 do
+		for xa = -25 , 25 , 1 do
+			--print( xa + i .. ya + j)
+			if not (((xa + x) >= (maxx-1)) and ((ya + y) >= (maxy-1)) and  ((ya +y) <= 1) and ((xa + x) <=1)) then
+				mapXY = map[xa + x][ya + y][z]
+				
+				if mapXY == 0 then
+					
+					--term.setCursorPos(xa+5,ya+25)
+					prompt= '#'
+				elseif mapXY == 1 then
+					--term.setCursorPos(xa+5,ya+25)
+					minerChar = dirToChar(dir)
+					prompt= minerChar
+				elseif mapXY == 2 then
+					--term.setCursorPos(xa+5,ya+25)
+					prompt= '-'
+				elseif mapXY == 3 then
+					--term.setCursorPos(xa+5,ya+25)
+					prompt= ' '
+				end 
+				screen = screen .. prompt
+			end			
+		end
+		screen = screen .. '\n'
+	end
+	printx=x
+	printy=y
+	printz=z
+	if gpsenabled then 
+		printx = realx 
+		printy = realy 
+		printz = realz 
+	end
+	screen = screen .. "BL:"..blocksLeft .. " X: " .. printx .. " Y: " .. printy  .. " Z: "..printz .." S: "..status .." Space: "..checkStorage()
+	
+	return screen
+end
+function incX()
+	xant = x
+	x = x + 1
+	if gpsenabled then realx = realx+1 end
+end
+
+function incY()
+	yant = y
+	y = y + 1
+	if gpsenabled then realy = realy+1 end
+end
+
+function incZ()
+	zant = z
+	z = z + 1
+	if gpsenabled then realz = realz+1 end
+end
+function decX()
+	xant = x
+	x = x - 1
+	if gpsenabled then realx = realx-1 end
+end
+
+function decY()
+	yant = y
+	y = y - 1
+	if gpsenabled then realy = realy-1 end
+end
+
+function decZ()
+	zant = z
+	z = z - 1
+	if gpsenabled then realz = realz-1 end
+end
+
+function forward()
+	
+	if dir == 0 then
+		if y >= maxy-1 then
+			return false
+		end
+	elseif dir == 1 then
+		if x >= maxx-1 then
+			return false
+		end
+	elseif dir == 2 then
+		if y <=1 then
+			return false
+		end
+	elseif dir == 3 then
+		if x <=1 then
+			return false
+		end
+	end
+
+	if turtle.forward() then
+		if dir == 0 then
+			incY()
+		elseif dir == 1 then
+			incX()
+		elseif dir == 2 then
+			decY()
+		elseif dir == 3 then
+			decX()
+		end
+		zant = z
+		scan()
+		updateMatrix()
+		return true
+	else
+		
+		if dir == 0 then
+			map[x][y + 1][z]=0
+		elseif dir == 1 then
+			map[x +1][y][z]=0
+		elseif dir == 2 then
+			map[x][y-1][z]=0
+		elseif dir == 3 then
+			map[x-1][y][z]=0
+		end
+		return false
+	end
+end
+function turnLeft()
+
+	turtle.turnLeft()
+	
+		if dir == 0 then
+			dir = 3
+		elseif dir == 1 then 
+			dir = 0
+		elseif dir == 2 then
+			dir = 1
+		elseif dir == 3 then
+			dir = 2
+		end
+		scan()
+		xant=x
+		yant=y
+		zant=z
+
+end
+function turnRight()
+		turtle.turnRight()
+		
+		if dir == 0 then
+			dir = 1
+		elseif dir == 1 then 
+			dir = 2
+		elseif dir == 2 then
+			dir = 3
+		elseif dir == 3 then
+			dir = 0
+		end
+		scan()
+		xant=x
+		yant=y
+		zant = z
+end
+function back() 
+
+
+	if dir == 0 then
+		if y <=1 then
+			return false
+		end
+		
+	elseif dir == 1 then
+		if x <=1 then
+			return false
+		end
+	elseif dir == 2 then
+		if y >= maxy-1 then
+			return false
+		end
+	elseif dir == 3 then
+		
+		if x >= maxx-1 then
+			return false
+		end
+	end
+
+
+
+	if turtle.back() then
+		if dir == 0 then
+			decY()
+		elseif dir == 1 then
+			decX()
+		elseif dir == 2 then
+			incY()
+		elseif dir == 3 then
+			incX()
+		end
+		zant = z
+		scan()
+		updateMatrix()
+	else
+		if dir == 0 then
+			map[x][y - 1][z]=0
+		elseif dir == 1 then
+			map[x -1][y][z]=0
+		elseif dir == 2 then
+			map[x][y+1][z]=0
+		elseif dir == 3 then
+			map[x+1][y][z]=0
+		end
+	end
+end
+function down()
+
+	if turtle.down() then
+		decZ()
+		scan()
+		updateMatrix()
+		return true
+	else
+		return false
+	end
+end
+function up()
+	
+	if turtle.up() then
+		incZ()
+		scan()
+		updateMatrix()
+		return true
+	else
+		return false
+	end
+end
+function scan()
+	if turtle.detect() then
+		if dir == 0 then
+			map[x][y + 1][z]=0
+		elseif dir == 1 then
+			map[x +1][y][z]=0
+		elseif dir == 2 then
+			map[x][y-1][z]=0
+		elseif dir == 3 then
+			map[x-1][y][z]=0
+		end
+	else 
+		if dir == 0 then
+			map[x][y + 1][z]=2
+		elseif dir == 1 then
+			map[x +1][y][z]=2
+		elseif dir == 2 then
+			map[x][y-1][z]=2
+		elseif dir == 3 then
+			map[x-1][y][z]=2
+		end
+	end
+end
+function fullScan()
+	laststatus=status
+	status="SCAN"
+	for i=1 , 4, 1 do
+		scan()
+		turnRight()
+	end
+	status=laststatus
+end
+function digAndDown()
+	if not down() then
+		turtle.digDown()
+		if down() then
+			return true
+		else
+			return false
+		end
+ 	end
+end
+
+function digUp()
+	if turtle.digUp() then
+		map[x][y][z+1]=2
+		return true
+	end
+	return false
+end
+function digDown()
+	if turtle.digDown() then
+		map[x][y][z-1]=2
+		return true
+	end
+	return false
+end
+function digAndUp()
+	if not up() then
+		turtle.digUp()
+		if up() then
+			return true
+		else
+			return false
+		end
+		return false
+	else
+		return true
+ 	end
+end
+
+function checkOre()
+	turtle.select(1)
+	if turtle.compare() then
+		return false
+	end
+	turtle.select(2)
+	if turtle.compare() then
+		return false
+	end
+	turtle.select(3)
+	if turtle.compare() then
+		return false
+	end
+	
+	return true
+end
+function checkOreUp()
+	turtle.select(1)
+	if turtle.compareUp() then
+		return false
+	end
+	turtle.select(2)
+	if turtle.compareUp() then
+		return false
+	end
+	turtle.select(3)
+	if turtle.compareUp() then
+		return false
+	end
+	
+	return true
+end
+function digAndForward()
+
+	
+
+	if not forward() then
+		if checkOre()then
+			mineOre()
+		end
+		turtle.dig()
+		if forward() then
+			return true
+		else
+			return false
+		end
+		return false
+ 	else 
+		return true
+	end
+end
+function receiveOrder()
+	print("Awaiting order...")
+	id, message  = rednet.receive()
+	
+	print ("Order: " .. message)
+	if message == "minemaster" then
+		master=id
+		rednet.send(id,"minemaster")
+		print("Master id: ".. master)
+	end
+
+	if message == 'f' then
+		forward()		
+	end
+	if message == 'b' then
+		back()
+	end
+	if message == 'up' then
+		turtle.up()
+	end
+	if message == 'chamber' then
+		digChamber(2)
+	end
+	if message == 'd' then
+		down()
+	end
+	if message == 'dd' then
+		digAndDown()
+	end
+	if message == 'df' then
+		digAndForward()
+	end
+	if message == 'du' then
+		digAndUp()
+	end
+	if message == 'dropall' then
+		dropAll()
+	end
+	if message == 'u' then
+		up()
+	end
+	if message == 'return' then
+		returnStartingPoint()
+	end
+	if message == 'l' then
+		turnLeft()
+	end
+	if message == 'r' then
+		turnRight()
+	end
+	if message == 'fs' then
+		fullScan()
+	end
+	if message == 'place' then
+		turtle.place()
+	end
+	if message == 'placeUp' then
+		turtle.placeUp()
+	end
+	if message == 'placeDown' then
+		turtle.placeDown()
+	end
+
+	if message:sub(1,4) == 'auto' then
+		alg = message:sub(5,7)
+		ss = tonumber(message:sub(8,9))
+		lt = tonumber(message:sub(10))
+		automine(lt,alg,ss)
+	end
+	print("Dir:"..dir .. "x:" .. x .. "y:" .. y .. "xant:" .. xant .. "yant:" .. yant)
+	
+end
+
+function faceSide(side)
+	while(dir~=side) do
+		turnRight()
+	end
+end
+
+function goToX(xCord)
+	if x > xCord then
+		--Volver
+		faceSide(3)
+		while x ~= xCord do
+			if not digAndForward() then
+				return false
+			end
+			
+			sendMap()
+		end
+	elseif x < xCord then
+		faceSide(1)
+		while(x ~= xCord) do
+			if not digAndForward() then
+				return false
+			end
+			sendMap()
+		end
+	end
+	return true
+end
+function goToY(yCord)
+	if y > yCord then
+		--Volver
+		faceSide(2)
+		while y ~= yCord do
+			if not digAndForward() then
+				return false
+			end
+			sendMap()
+		end
+	elseif y < yCord then
+		faceSide(0)
+		while y ~= yCord do
+			if not digAndForward() then
+				return false
+			end
+			sendMap()
+		end
+	end
+	return true
+end
+function goToZ(zCord)
+	if z > zCord then
+		--Volver
+		while z ~= zCord do
+			if not digAndDown() then
+				return false
+			end
+			sendMap()
+		end
+	elseif z < zCord then
+		while z ~= zCord do
+			if not digAndUp() then
+				return false
+			end
+			sendMap()
+		end
+	end
+	return true
+end
+
+function goTo(x,y,z)
+
+	goToZ(z)
+	goToX(x)
+	goToY(y)
+
+
+end
+function returnStartingPoint() 
+	status = "RETURN"
+	endx=initialx
+	endy=initialy
+	endz=initialz
+	
+	goTo(endx,endy,endz)
+	faceSide(dirini)
+	status = "IDLE"
+	sendMap()
+end
+
+function sendDir()
+	rednet.send(master, "dir:"..x.."-"..y.."-"..dir)
+end
+function sendLocation()
+
+	rednet.send(master, "loc:"..x.."-"..y.."-"..xant.."-"..yant.."-"..dir)
+
+end
+function sendMap()
+	
+	
+	cadena = ScreenUpdate(x,y,minerChar)
+	rednet.send(master,cadena)
+	
+end
+
+function dropIfFull() 
+	laststatus = status
+	status ="DROP"
+		if isAllSlots() then
+				--if checkStorage() == 0 then
+			lastx=x
+			lasty=y
+			lastz=k
+			lastdir = dir
+			goTo(dropx,dropy,dropz)
+			faceSide(dirini)
+			dropAll()
+			--Advance to starting point.
+			digAndForward()
+			digAndForward()
+			digAndForward()
+			digAndForward()
+			digAndForward()
+			goTo(lastx,lasty,lastz)
+			faceSide(lastdir)
+		end
+	status= laststatus
+end
+
+function digAndForwardHard()
+	l=0
+	while not digAndForward() do
+		l=l+1
+		if l == 10 then
+			return false
+		end
+	end
+	return true
+end
+function digAndDownHard()
+	l=0
+	while not digAndDown() do
+		l=l+1
+		if l == 10 then
+			return false
+		end
+	end
+	return true
+end
+
+function digChamber(size) 
+	
+	local inix=x
+	local iniy=y
+	local iniz=z
+	local inidir=dir
+	local turned = false
+	local hitBedrock = false
+	
+	goTo(x-size,y-size,z-size)
+	for k = 1 , size*2 , 1 do
+		for j = 1 , size*2 , 1 do
+			for i = 1 , size*2 ,  1 do
+				if not digAndForwardHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+			end
+			if not turned then
+				turnRight()
+				if not digAndForwardHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+				turnRight()
+				turned = true
+			else 
+				turnLeft()
+				if not digAndForwardHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+				turnLeft()
+				turned = false
+			end
+		end
+		digUp()
+	end
+	return not hitBedrock
+end
+
+
+function mineOre()
+
+	turtle.dig()
+	turtle.forward()
+	turtle.turnLeft()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	--
+	turtle.turnRight()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	--
+	turtle.turnRight()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	--
+	turtle.turnRight()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	turtle.dig()
+	turtle.forward()
+	turtle.digUp()
+	--
+	turtle.turnRight()
+	turtle.dig()
+	turtle.forward()
+	turtle.dig()
+	turtle.digUp()
+	turtle.turnRight()
+end
+
+
+
+function automine(steps,tipo,s)
+	status = "AUTO"	
+	
+	i=1 
+	j=1
+	--Pause params
+	pausecount = 1
+	pause=false
+	stepstopause = 5
+
+
+	--start = os.time()
+	going=true
+	izq=true	
+	
+	--Setting the drop point
+	dropx = x
+	dropy = y
+	dropz = z
+	
+	--Advance to starting point.
+	digAndForward()
+	digAndForward()
+	digAndForward()
+	digAndForward()
+	digAndForward()
+	
+	--Autominer start point (shafting nexus)
+	xini = x
+	yini = y
+	zini = z
+	dirini=dir
+	k=zini
+	--Keep track of last point to return after drop.
+	lastx=x
+	lasty=y
+	lastz=z
+
+	currentSteps=0
+	hitBedrock=false
+	auto = true
+	
+	bedrockz=z
+	bedrocky=y
+	bedrockx=x
+	while auto do
+	
+		dropIfFull()
+		if tipo == "sha" then
+		
+			--PARAMS
+			size=s
+			shafts=5
+			--
+			
+			if i == size then
+				if going then
+					turnLeft()
+					if not digAndForwardHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+					digUp()
+					if not digAndForwardHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+					digUp()
+					turnLeft()
+					going = false
+				else
+					turnRight()
+					if not digAndForwardHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+					digUp()
+					if not digAndForwardHard() then
+						--hit bedrock
+						hitBedrock=true
+					end
+					digUp()
+					turnRight()
+					going = true
+					j=j+1
+				end
+				i=1
+			else
+				i=i+1
+				if not digAndForwardHard() then
+					--hit bedrock
+					hitBedrock=true
+				end
+				digUp()
+			end
+			--If finish the number of shafts then go to start point of this shaft and go to 3 Levels down to start a new shafting.
+			if j == shafts then
+				goTo(xini,yini,k)
+				faceSide(dirini)
+
+				if izq == true then
+					going=false
+					izq = false
+				else
+					going=true
+					if not digAndDownHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+					if not digAndDownHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+					if not digAndDownHard() then
+					--hit bedrock
+						hitBedrock=true
+					end
+					izq = true
+					k=k-3
+				end
+				j=1
+
+			end
+			
+			if hitBedrock then
+				laststatus = status
+				status ="BEDROCK"
+				-- print("OFF (hit bedrock)")
+					-- goTo(dropx,dropy,dropz)
+				-- print("Heading drop point".. dropx .. " ".. dropy .. " " ..dropz)
+					-- faceSide(dirini)
+					-- sendMap()
+					-- rednet.send(master,"autominer:done")
+					--auto=false
+				pause = true
+				hitBedrock= false
+				status = "IDLE"
+				
+			end
+		elseif type== "spiral" then
+			--Go 10 steps forward.
+			--Spire spire spire
+		end
+			
+	--	now = os.time()
+		--if now > start + t then
+		
+		--pause
+		--every "stepstopause" steps will try to receive an Pause message from server for a second.
+		if pausecount == stepstopause then 
+			print("Pausing...")
+			id, msg = rednet.receive(1)
+			if id == master then
+				if msg == "autominer:pause" then
+					rednet.send(master,"autominer:paused")
+					print("paused")
+					pause = true
+				end
+			end
+			pausecount = 1
+		end
+		--If it reaches the limit of steps OR it is Paused then ask what to do to the server
+		if currentSteps > steps or pause then
+			--Continue or not ?
+			print("Requesting input from master...")
+			rednet.send(master,"autominer:stopped")
+			while true do
+				id,msg = rednet.receive()
+				if id == master then
+					if msg == "autominer:continue" then
+						--Continue
+						print("Continue mining...")
+						--start = os.time()
+						currentSteps = 0
+						pause = false
+						break
+					elseif msg=="autominer:stop" then
+					
+						print("Returning base...")
+						returnStartingPoint()
+						sendMap()
+						rednet.send(master,"autominer:done")
+						
+						auto=false
+						break
+					elseif msg=="autominer:manual" then
+					
+						print("Manual mode...")
+						sendMap()
+						rednet.send(master,"autominer:done")
+						auto=false
+						break
+					end
+				end
+			end
+		end
+		
+		pausecount = pausecount+1
+		currentSteps = currentSteps +1
+		blocksLeft = steps - currentSteps
+		print("Left: " .. blocksLeft)
+		sendMap()
+	end
+	status="IDLE"
+end
+
+connectGps()
+connectW()
+presentMiner()
+
+while true do
+
+	
+	receiveOrder()
+	sendMap()
+	-- now = os.time()
+	-- if (beginTime + timeout) < now then
+		-- returnStartingPoint()
+		-- print("Timed Out: Returning to base and power off...")
+		-- break
+	-- end
+end

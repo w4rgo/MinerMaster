@@ -1,0 +1,27 @@
+operate=true
+arriba=true
+turtle.select(1)
+
+while true do
+	print("Elevator: Press Enter")
+	read()
+	operate = true
+	while operate do
+
+		if arriba then
+			if not turtle.down() then
+				operate = false
+				arriba = false
+			end
+		else
+			if not turtle.up() then
+			
+				operate = false
+				arriba = true
+			end
+			
+		end
+
+
+	end
+end
